@@ -4,7 +4,7 @@
 // =============================================================================
 
 const API_BASE = 'https://v3.football.api-sports.io';
-const API_KEY = process.env.API_FOOTBALL_KEY || '';
+const API_KEY = (process.env.API_FOOTBALL_KEY || '').trim();
 const SEASON = 2024; // Most recent complete season on free tier (2024-25)
 
 // Internal mapping: our codes → API-Football numeric league IDs
