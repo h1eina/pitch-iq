@@ -15,16 +15,45 @@ const FDO_LEAGUE_IDS: Record<string, number> = {
 // Shared interfaces (same shape as football-api.ts for drop-in compatibility)
 import type { ApiStanding, ApiMatch, ApiScorer } from './football-api';
 
+// Rate-limit queue: Football-Data.org allows 10 req/min, so we space requests ~7s apart
+let lastFdoRequest = 0;
+const FDO_MIN_INTERVAL = 7000; // 7 seconds between requests
+
+async function fdoRateLimitWait(): Promise<void> {
+  const now = Date.now();
+  const elapsed = now - lastFdoRequest;
+  if (elapsed < FDO_MIN_INTERVAL) {
+    await new Promise(r => setTimeout(r, FDO_MIN_INTERVAL - elapsed));
+  }
+  lastFdoRequest = Date.now();
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function fdoFetch(path: string, revalidate = 600): Promise<any> {
   if (!FDO_KEY) {
     console.warn('[Football-Data.org] No API key set (FOOTBALL_DATA_ORG_KEY). Skipping.');
     return null;
   }
+  await fdoRateLimitWait();
   const res = await fetch(`${FDO_BASE}${path}`, {
     headers: { 'X-Auth-Token': FDO_KEY },
     next: { revalidate },
   });
+  if (res.status === 429) {
+    // Rate limited — wait and retry once
+    console.warn(`[Football-Data.org] 429 rate-limited for ${path}, retrying in 10s...`);
+    await new Promise(r => setTimeout(r, 10000));
+    lastFdoRequest = Date.now();
+    const retry = await fetch(`${FDO_BASE}${path}`, {
+      headers: { 'X-Auth-Token': FDO_KEY },
+      next: { revalidate },
+    });
+    if (!retry.ok) {
+      console.error(`[Football-Data.org] ${retry.status} for ${path} (retry)`);
+      return null;
+    }
+    return retry.json();
+  }
   if (!res.ok) {
     console.error(`[Football-Data.org] ${res.status} for ${path}`);
     return null;
@@ -166,6 +195,35 @@ export async function fdoGetTodayMatches(): Promise<ApiMatch[] | null> {
       const code = Object.entries(FDO_LEAGUE_IDS).find(([, id]) => id === m.competition?.id)?.[0] || '';
       return adaptFdoMatch(m, code);
     });
+}
+
+export async function fdoGetRecentMatches(competitionCode: string, limit = 10): Promise<ApiMatch[] | null> {
+  const compId = FDO_LEAGUE_IDS[competitionCode];
+  if (!compId) return null;
+  const data = await fdoFetch(`/competitions/${compId}/matches?status=FINISHED`, 3600);
+  if (!data?.matches) return null;
+  const matches = data.matches.map((m: any) => adaptFdoMatch(m, competitionCode));
+  return matches.slice(-limit);
+}
+
+export async function fdoGetScheduledMatches(): Promise<ApiMatch[] | null> {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const dateStr = tomorrow.toISOString().slice(0, 10);
+  // Get matches for next 3 days
+  const endDate = new Date();
+  endDate.setDate(endDate.getDate() + 4);
+  const endStr = endDate.toISOString().slice(0, 10);
+  const data = await fdoFetch(`/matches?dateFrom=${dateStr}&dateTo=${endStr}`, 600);
+  if (!data?.matches) return null;
+  const top5 = new Set(Object.values(FDO_LEAGUE_IDS));
+  return data.matches
+    .filter((m: any) => top5.has(m.competition?.id))
+    .map((m: any) => {
+      const code = Object.entries(FDO_LEAGUE_IDS).find(([, id]) => id === m.competition?.id)?.[0] || '';
+      return adaptFdoMatch(m, code);
+    })
+    .slice(0, 20);
 }
 
 export function isFdoConfigured(): boolean {

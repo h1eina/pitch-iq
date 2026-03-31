@@ -4,11 +4,11 @@
 // =============================================================================
 
 // --- Football-Data.org fallback (no daily cap) ---
-import { fdoGetStandings, fdoGetMatches, fdoGetScorers, fdoGetTodayMatches, isFdoConfigured } from './football-data-org';
+import { fdoGetStandings, fdoGetMatches, fdoGetScorers, fdoGetTodayMatches, fdoGetRecentMatches, fdoGetScheduledMatches, isFdoConfigured } from './football-data-org';
 
 const API_BASE = 'https://v3.football.api-sports.io';
 const API_KEY = (process.env.API_FOOTBALL_KEY || '').trim();
-const SEASON = 2025; // Current season 2025-26
+const SEASON = 2024; // API-Football free tier max is 2024; FDO auto-detects current season
 
 // Internal mapping: our codes → API-Football numeric league IDs
 const LEAGUE_API_IDS: Record<string, number> = {
@@ -227,10 +227,16 @@ export async function getLeagueMatches(competitionCode: string, matchday?: numbe
 }
 
 export async function getRecentLeagueMatches(competitionCode: string): Promise<ApiMatch[]> {
+  // Try Football-Data.org first (current season, no daily cap)
+  if (isFdoConfigured()) {
+    try {
+      const fdo = await fdoGetRecentMatches(competitionCode, 10);
+      if (fdo && fdo.length > 0) return fdo;
+    } catch { /* fall through to API-Football */ }
+  }
   try {
     const leagueId = LEAGUE_API_IDS[competitionCode];
     if (!leagueId) return [];
-    // Fetch last round of the season (round 38 for PL, or similar)
     const data = await apiFetch(`/fixtures?league=${leagueId}&season=${SEASON}&status=FT`, 3600);
     const matches = (data.response || []).map(adaptFixture);
     return matches.slice(-10);
@@ -290,6 +296,13 @@ export async function getTodayMatches(): Promise<ApiMatch[]> {
 }
 
 export async function getScheduledMatches(): Promise<ApiMatch[]> {
+  // Try Football-Data.org first (no daily cap)
+  if (isFdoConfigured()) {
+    try {
+      const fdo = await fdoGetScheduledMatches();
+      if (fdo && fdo.length > 0) return fdo;
+    } catch { /* fall through to API-Football */ }
+  }
   try {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -428,24 +441,20 @@ export async function getCompetitionTeams(competitionCode: string): Promise<{ id
 
 export async function getAllLeagueStandings(): Promise<Record<string, ApiStanding[]>> {
   const codes = Object.keys(LEAGUE_META);
-  const results = await Promise.all(
-    codes.map(code => getLeagueStandings(code).then(standings => ({ code, standings })))
-  );
   const map: Record<string, ApiStanding[]> = {};
-  for (const { code, standings } of results) {
-    map[code] = standings;
+  // Fetch sequentially to respect FDO rate limits (10 req/min)
+  for (const code of codes) {
+    map[code] = await getLeagueStandings(code);
   }
   return map;
 }
 
 export async function getAllLeagueScorers(): Promise<Record<string, ApiScorer[]>> {
   const codes = Object.keys(LEAGUE_META);
-  const results = await Promise.all(
-    codes.map(code => getLeagueScorers(code, 20).then(scorers => ({ code, scorers })))
-  );
   const map: Record<string, ApiScorer[]> = {};
-  for (const { code, scorers } of results) {
-    map[code] = scorers;
+  // Fetch sequentially to respect FDO rate limits (10 req/min)
+  for (const code of codes) {
+    map[code] = await getLeagueScorers(code, 20);
   }
   return map;
 }
