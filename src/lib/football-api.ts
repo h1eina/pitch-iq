@@ -3,9 +3,12 @@
 // Free tier: 100 req/day — we cache aggressively with Next.js revalidation
 // =============================================================================
 
+// --- Football-Data.org fallback (no daily cap) ---
+import { fdoGetStandings, fdoGetMatches, fdoGetScorers, fdoGetTodayMatches, isFdoConfigured } from './football-data-org';
+
 const API_BASE = 'https://v3.football.api-sports.io';
 const API_KEY = (process.env.API_FOOTBALL_KEY || '').trim();
-const SEASON = 2024; // Most recent complete season on free tier (2024-25)
+const SEASON = 2025; // Current season 2025-26
 
 // Internal mapping: our codes → API-Football numeric league IDs
 const LEAGUE_API_IDS: Record<string, number> = {
@@ -186,6 +189,13 @@ function adaptScorer(s: any): ApiScorer {
 // --- Public API functions ---
 
 export async function getLeagueStandings(competitionCode: string): Promise<ApiStanding[]> {
+  // Try Football-Data.org first (no daily cap) → fall back to API-Football
+  if (isFdoConfigured()) {
+    try {
+      const fdo = await fdoGetStandings(competitionCode);
+      if (fdo && fdo.length > 0) return fdo;
+    } catch { /* fall through to API-Football */ }
+  }
   try {
     const leagueId = LEAGUE_API_IDS[competitionCode];
     if (!leagueId) return [];
@@ -198,6 +208,13 @@ export async function getLeagueStandings(competitionCode: string): Promise<ApiSt
 }
 
 export async function getLeagueMatches(competitionCode: string, matchday?: number): Promise<ApiMatch[]> {
+  // Try Football-Data.org first (no daily cap) → fall back to API-Football
+  if (isFdoConfigured()) {
+    try {
+      const fdo = await fdoGetMatches(competitionCode, matchday ? { matchday } : undefined);
+      if (fdo && fdo.length > 0) return fdo;
+    } catch { /* fall through to API-Football */ }
+  }
   try {
     const leagueId = LEAGUE_API_IDS[competitionCode];
     if (!leagueId) return [];
@@ -223,6 +240,13 @@ export async function getRecentLeagueMatches(competitionCode: string): Promise<A
 }
 
 export async function getLeagueScorers(competitionCode: string, limit = 15): Promise<ApiScorer[]> {
+  // Try Football-Data.org first (no daily cap) → fall back to API-Football
+  if (isFdoConfigured()) {
+    try {
+      const fdo = await fdoGetScorers(competitionCode, limit);
+      if (fdo && fdo.length > 0) return fdo;
+    } catch { /* fall through to API-Football */ }
+  }
   try {
     const leagueId = LEAGUE_API_IDS[competitionCode];
     if (!leagueId) return [];
@@ -248,6 +272,13 @@ function todayStr(): string {
 }
 
 export async function getTodayMatches(): Promise<ApiMatch[]> {
+  // Try Football-Data.org first (no daily cap) → fall back to API-Football
+  if (isFdoConfigured()) {
+    try {
+      const fdo = await fdoGetTodayMatches();
+      if (fdo && fdo.length > 0) return fdo;
+    } catch { /* fall through to API-Football */ }
+  }
   try {
     const data = await apiFetch(`/fixtures?date=${todayStr()}`, 300);
     return (data.response || [])
