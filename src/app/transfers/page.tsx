@@ -33,6 +33,14 @@ const transfers: MockTransfer[] = [
   { id: 't10', player: 'Michael Olise', age: 24, position: 'RW', nationality: '🇫🇷', fromTeam: 'Bayern Munich', fromLogo: '🔴', toTeam: 'Chelsea', toLogo: '🔵', fee: '€70M', feeNumeric: 70, type: 'permanent', status: 'rumour', date: '2026-08-05', league: 'PL' },
   { id: 't11', player: 'Xavi Simons', age: 23, position: 'CAM', nationality: '🇳🇱', fromTeam: 'PSG', fromLogo: '🔴🔵', toTeam: 'RB Leipzig', toLogo: '⚪🔴', fee: 'Loan+Option', feeNumeric: 70, type: 'loan-with-option', status: 'official', date: '2026-01-10', league: 'BL1' },
   { id: 't12', player: 'Sandro Tonali', age: 25, position: 'CM', nationality: '🇮🇹', fromTeam: 'Newcastle', fromLogo: '⚫⚪', toTeam: 'Juventus', toLogo: '⚫⚪', fee: '€45M', feeNumeric: 45, type: 'permanent', status: 'rumour', date: '2026-07-15', league: 'SA' },
+  { id: 't13', player: 'Jamal Musiala', age: 23, position: 'AM', nationality: '🇩🇪', fromTeam: 'Bayern Munich', fromLogo: '🔴', toTeam: 'Manchester City', toLogo: '🔵', fee: '€130M', feeNumeric: 130, type: 'permanent', status: 'rumour', date: '2026-07-20', league: 'PL' },
+  { id: 't14', player: 'Gavi', age: 21, position: 'CM', nationality: '🇪🇸', fromTeam: 'Barcelona', fromLogo: '🔵🔴', toTeam: 'Barcelona', toLogo: '🔵🔴', fee: 'Renewal', feeNumeric: 0, type: 'permanent', status: 'official', date: '2026-03-01', league: 'PD' },
+  { id: 't15', player: 'Evan Ferguson', age: 21, position: 'ST', nationality: '🇮🇪', fromTeam: 'Brighton', fromLogo: '🔵⚪', toTeam: 'Chelsea', toLogo: '🔵', fee: '€60M', feeNumeric: 60, type: 'permanent', status: 'negotiating', date: '2026-06-25', league: 'PL' },
+  { id: 't16', player: 'Aurélien Tchouaméni', age: 26, position: 'CDM', nationality: '🇫🇷', fromTeam: 'Real Madrid', fromLogo: '⚪', toTeam: 'Liverpool', toLogo: '🔴', fee: '€85M', feeNumeric: 85, type: 'permanent', status: 'rumour', date: '2026-08-10', league: 'PL' },
+  { id: 't17', player: 'Désiré Doué', age: 20, position: 'LW', nationality: '🇫🇷', fromTeam: 'PSG', fromLogo: '🔴🔵', toTeam: 'Arsenal', toLogo: '🔴', fee: '€50M', feeNumeric: 50, type: 'permanent', status: 'negotiating', date: '2026-07-05', league: 'PL' },
+  { id: 't18', player: 'Castello Lukeba', age: 22, position: 'CB', nationality: '🇫🇷', fromTeam: 'RB Leipzig', fromLogo: '⚪🔴', toTeam: 'Real Madrid', toLogo: '⚪', fee: '€70M', feeNumeric: 70, type: 'permanent', status: 'rumour', date: '2026-07-18', league: 'PD' },
+  { id: 't19', player: 'Moisés Caicedo', age: 24, position: 'CDM', nationality: '🇪🇨', fromTeam: 'Chelsea', fromLogo: '🔵', toTeam: 'Real Madrid', toLogo: '⚪', fee: '€95M', feeNumeric: 95, type: 'permanent', status: 'rumour', date: '2026-08-15', league: 'PD' },
+  { id: 't20', player: 'Rasmus Højlund', age: 23, position: 'ST', nationality: '🇩🇰', fromTeam: 'Man United', fromLogo: '🔴', toTeam: 'AC Milan', toLogo: '🔴⚫', fee: '€55M', feeNumeric: 55, type: 'permanent', status: 'negotiating', date: '2026-06-30', league: 'SA' },
 ];
 
 const statusConfig: Record<string, { label: string; color: string; icon: typeof CheckCircle }> = {
@@ -84,6 +92,82 @@ export default function TransfersPage() {
           <p className="text-[10px] text-slate-400 uppercase tracking-wider">Biggest Deal</p>
         </div>
       </div>
+
+      {/* Deadline Day Countdown */}
+      {(() => {
+        const deadline = new Date('2026-09-01T23:00:00Z');
+        const now = new Date();
+        const diff = deadline.getTime() - now.getTime();
+        const days = Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
+        const hours = Math.max(0, Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)));
+        const mins = Math.max(0, Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)));
+        return (
+          <section className="card p-5 border-l-4 border-l-red-500 bg-gradient-to-r from-red-500/5 to-transparent">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-red-400 flex items-center gap-2"><Clock size={14} /> TRANSFER DEADLINE DAY</h2>
+                <p className="text-[10px] text-slate-500 mt-0.5">Summer 2026 window closes Sep 1, 2026 at 23:00 UTC</p>
+              </div>
+              <div className="flex gap-3">
+                {[{ val: days, label: 'DAYS' }, { val: hours, label: 'HRS' }, { val: mins, label: 'MIN' }].map(u => (
+                  <div key={u.label} className="text-center">
+                    <p className="text-2xl font-black text-white tabular-nums">{String(u.val).padStart(2, '0')}</p>
+                    <p className="text-[8px] text-slate-500 uppercase tracking-widest">{u.label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        );
+      })()}
+
+      {/* Fee Analysis by Position */}
+      <section className="card p-5">
+        <h2 className="text-sm font-bold text-slate-200 mb-4 flex items-center gap-2">
+          <TrendingUp size={14} className="text-yellow-400" /> Fee Analysis by Position
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {(() => {
+            const posGroups: Record<string, { count: number; total: number; avg: number }> = {};
+            transfers.forEach(t => {
+              const pos = t.position.replace('CAM', 'MID').replace('CDM', 'MID').replace('AM', 'MID').replace('CB', 'DEF');
+              if (!posGroups[pos]) posGroups[pos] = { count: 0, total: 0, avg: 0 };
+              posGroups[pos].count++;
+              posGroups[pos].total += t.feeNumeric;
+            });
+            Object.values(posGroups).forEach(g => { g.avg = Math.round(g.total / g.count); });
+            const posColors: Record<string, string> = { ST: 'red', RW: 'orange', LW: 'orange', MID: 'emerald', DEF: 'cyan', CM: 'emerald' };
+            return Object.entries(posGroups).sort((a, b) => b[1].total - a[1].total).map(([pos, data]) => {
+              const color = posColors[pos] || 'slate';
+              return (
+                <div key={pos} className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.06]">
+                  <p className={`text-xs font-bold text-${color}-400`}>{pos}</p>
+                  <p className="text-lg font-black text-white mt-1">€{data.total}M</p>
+                  <p className="text-[10px] text-slate-500">{data.count} deals · Avg €{data.avg}M</p>
+                </div>
+              );
+            });
+          })()}
+        </div>
+      </section>
+
+      {/* Top Movers - Highest Value */}
+      <section className="card p-5">
+        <h2 className="text-sm font-bold text-slate-200 mb-4 flex items-center gap-2">
+          <Flame size={14} className="text-orange-400" /> Top 5 Most Expensive Moves
+        </h2>
+        <div className="space-y-2">
+          {[...transfers].sort((a, b) => b.feeNumeric - a.feeNumeric).slice(0, 5).map((t, i) => (
+            <div key={t.id} className="flex items-center gap-3 p-2 rounded-lg bg-white/[0.02]">
+              <span className={`text-lg font-black w-6 text-center ${i === 0 ? 'text-yellow-400' : i === 1 ? 'text-slate-300' : i === 2 ? 'text-amber-600' : 'text-slate-500'}`}>{i + 1}</span>
+              <span className="text-sm">{t.nationality}</span>
+              <span className="text-sm font-bold text-white flex-1">{t.player}</span>
+              <span className="text-xs text-slate-400">{t.fromTeam} → {t.toTeam}</span>
+              <span className="text-sm font-black text-yellow-400">{t.fee}</span>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {/* Transfer Feed */}
       <section className="card p-5">

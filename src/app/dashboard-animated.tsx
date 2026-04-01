@@ -333,9 +333,13 @@ export function AnimatedDashboard({
       {/* Quick Links */}
       <StaggerContainer className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
+          { href: '/fantasy', label: 'Fantasy League', desc: 'Build your dream XI', icon: '⭐', color: 'from-yellow-500 to-orange-600' },
+          { href: '/simulator', label: 'Match Simulator', desc: 'Live xG engine', icon: '⚡', color: 'from-red-500 to-rose-600' },
+          { href: '/predictions', label: 'Predictions', desc: 'Predict & compete', icon: '🧠', color: 'from-purple-500 to-violet-600' },
+          { href: '/transfers', label: 'Transfer Hub', desc: 'Deals & rumours', icon: '🔄', color: 'from-emerald-500 to-teal-600' },
           { href: '/analytics', label: 'Analytics Hub', desc: 'Cross-league stats', icon: '📊', color: 'from-orange-500 to-amber-600' },
           { href: '/h2h', label: 'Head-to-Head', desc: 'Compare any teams', icon: '⚔️', color: 'from-cyan-500 to-blue-600' },
-          { href: '/trivia', label: 'Football Trivia', desc: '55+ questions', icon: '🧠', color: 'from-violet-500 to-purple-600' },
+          { href: '/trivia', label: 'Football Trivia', desc: '55+ questions', icon: '🎯', color: 'from-violet-500 to-purple-600' },
           { href: '/studio', label: 'Content Studio', desc: 'YouTube tools', icon: '🎬', color: 'from-rose-500 to-red-600' },
         ].map(item => (
           <StaggerItem key={item.href}>

@@ -570,3 +570,141 @@ export interface HeadToHead {
   team2Goals: number;
   recentMeetings: { date: string; score: string; competition: string }[];
 }
+
+// ============================================================================
+// Fantasy Football System (FPL-Style)
+// ============================================================================
+
+export type FantasyPosition = 'GKP' | 'DEF' | 'MID' | 'FWD';
+export type FantasyChip = 'none' | 'wildcard' | 'bench-boost' | 'triple-captain' | 'free-hit';
+export type PlayerAvailability = 'available' | 'doubtful' | 'injured' | 'suspended' | 'unavailable';
+
+export interface FantasyPlayer {
+  id: string;
+  name: string;
+  team: string;
+  teamId: string;
+  position: FantasyPosition;
+  price: number;
+  totalPoints: number;
+  gameweekPoints: number;
+  form: number;
+  selectedBy: number;
+  minutesPlayed: number;
+  goals: number;
+  assists: number;
+  cleanSheets: number;
+  goalsConceded: number;
+  saves: number;
+  bonusPoints: number;
+  yellowCards: number;
+  redCards: number;
+  ictIndex: number;
+  influence: number;
+  creativity: number;
+  threat: number;
+  expectedGoals: number;
+  expectedAssists: number;
+  pointsPerGame: number;
+  priceChange: number;
+  availability: PlayerAvailability;
+  news: string;
+  nextFixtureDifficulty: number;
+  nextOpponent: string;
+  overallRating: number;
+}
+
+export interface FantasySquadPlayer {
+  playerId: string;
+  position: number;
+  isCaptain: boolean;
+  isViceCaptain: boolean;
+  isBenched: boolean;
+  purchasePrice: number;
+  sellingPrice: number;
+}
+
+export interface FantasyTransfer {
+  gameweek: number;
+  playerIn: string;
+  playerOut: string;
+  priceIn: number;
+  priceOut: number;
+  date: string;
+}
+
+export interface FantasySquad {
+  id: string;
+  name: string;
+  managerName: string;
+  players: FantasySquadPlayer[];
+  bank: number;
+  totalValue: number;
+  freeTransfers: number;
+  wildcardsUsed: number;
+  benchBoostUsed: boolean;
+  tripleCaptainUsed: boolean;
+  freeHitUsed: boolean;
+  totalPoints: number;
+  gameweekPoints: number;
+  overallRank: number;
+  gameweekRank: number;
+  captainId: string;
+  viceCaptainId: string;
+  formation: string;
+  chip: FantasyChip;
+  transferHistory: FantasyTransfer[];
+}
+
+export interface FantasyGameweek {
+  id: number;
+  name: string;
+  deadline: string;
+  isActive: boolean;
+  isCompleted: boolean;
+  isCurrent: boolean;
+  highestScore: number;
+  averageScore: number;
+  transfersMade: number;
+  topPlayer: string;
+  topPlayerPoints: number;
+  chipPlays: { wildcard: number; benchBoost: number; tripleCaptain: number; freeHit: number };
+}
+
+export interface FantasyLeagueEntry {
+  rank: number;
+  previousRank: number;
+  teamName: string;
+  managerName: string;
+  totalPoints: number;
+  gameweekPoints: number;
+}
+
+export interface FantasyLeague {
+  id: string;
+  name: string;
+  type: 'classic' | 'h2h';
+  entries: FantasyLeagueEntry[];
+  createdBy: string;
+}
+
+export interface MatchPrediction {
+  matchId: string;
+  homeScore: number;
+  awayScore: number;
+  confidence: number;
+  predictedAt: string;
+  actualHome?: number;
+  actualAway?: number;
+  pointsEarned?: number;
+}
+
+export interface PredictionRecord {
+  totalPredictions: number;
+  correctScorelines: number;
+  correctOutcomes: number;
+  totalPoints: number;
+  accuracy: number;
+  streak: number;
+  bestStreak: number;
+}
