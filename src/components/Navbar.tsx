@@ -1,19 +1,22 @@
 'use client';
 import Link from 'next/link';
 import { useState } from 'react';
-import { Menu, X, Zap, Trophy, Users, Gamepad2, Tv, MessageCircle, Globe, Star, ArrowLeftRight, Brain, Crosshair } from 'lucide-react';
+import { Menu, X, Zap, Trophy, Users, Gamepad2, MessageCircle, Globe, Star, ArrowLeftRight, Brain, Crosshair, GitCompareArrows, Table, Eye, Award, Layout } from 'lucide-react';
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: Zap },
   { href: '/leagues/premier-league', label: 'Leagues', icon: Trophy },
   { href: '/players', label: 'Players', icon: Users },
   { href: '/fantasy', label: 'Fantasy', icon: Star },
+  { href: '/compare', label: 'Compare', icon: GitCompareArrows },
+  { href: '/standings', label: 'Standings', icon: Table },
+  { href: '/scouting', label: 'Scouting', icon: Eye },
+  { href: '/awards', label: 'Awards', icon: Award },
+  { href: '/tactics', label: 'Tactics', icon: Layout },
   { href: '/simulator', label: 'Simulator', icon: Crosshair },
   { href: '/predictions', label: 'Predictions', icon: Brain },
   { href: '/transfers', label: 'Transfers', icon: ArrowLeftRight },
-  { href: '/tournaments', label: 'Tournaments', icon: Globe },
   { href: '/trivia', label: 'Trivia', icon: Gamepad2 },
-  { href: '/community', label: 'Community', icon: MessageCircle },
 ];
 
 export default function Navbar() {
