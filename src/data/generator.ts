@@ -1,6 +1,6 @@
 // ============================================================================
-// PitchIQ Data Generator - Programmatic generation of FM-depth data
-// Generates: Players, Standings, Matches, Transfers, Injuries
+// PitchIQ Data Generator - Real Player Data + FM-depth attributes
+// Uses real squad data from Football-Data.org, enriched with generated stats
 // ============================================================================
 
 import type {
@@ -10,6 +10,89 @@ import type {
   AdvancedMatchStats, Commentary,
 } from '@/lib/types';
 import { allTeamDefs, type TeamDef } from './team-definitions';
+import realSquadsData from './real-squads.json';
+
+// --- Real Squad Data Integration ---
+interface RealPlayer { id: number; name: string; position: string; dateOfBirth: string; nationality: string; }
+interface RealTeamData { id: number; name: string; shortName: string; tla: string; squad: RealPlayer[]; }
+
+// Maps our internal team IDs to FDO TLA codes for squad lookup
+const teamIdToTla: Record<string, string> = {
+  // Premier League
+  'arsenal': 'ARS', 'aston-villa': 'AVL', 'chelsea': 'CHE', 'everton': 'EVE',
+  'fulham': 'FUL', 'liverpool': 'LIV', 'man-city': 'MCI', 'man-utd': 'MUN',
+  'newcastle': 'NEW', 'tottenham': 'TOT', 'wolves': 'WOL', 'nottm-forest': 'NOT',
+  'crystal-palace': 'CRY', 'brighton': 'BHA', 'brentford': 'BRE', 'west-ham': 'WHU',
+  'bournemouth': 'BOU',
+  // La Liga
+  'real-madrid': 'RMA', 'barcelona': 'FCB', 'atletico-madrid': 'ATL',
+  'real-sociedad': 'RSO', 'real-betis': 'BET', 'villarreal': 'VIL',
+  'athletic-bilbao': 'ATH', 'sevilla': 'SEV', 'girona': 'GIR',
+  'celta-vigo': 'CEL', 'mallorca': 'MAL', 'osasuna': 'OSA', 'getafe': 'GET',
+  'rayo-vallecano': 'RAY', 'espanyol': 'ESP', 'alaves': 'ALA', 'valencia': 'VAL',
+  // Serie A
+  'inter-milan': 'INT', 'ac-milan': 'MIL', 'juventus': 'JUV', 'napoli': 'NAP',
+  'atalanta': 'ATA', 'lazio': 'LAZ', 'roma': 'ROM', 'fiorentina': 'FIO',
+  'torino': 'TOR', 'bologna': 'BOL', 'udinese': 'UDI', 'genoa': 'GEN',
+  'cagliari': 'CAG', 'parma': 'PAR', 'como': 'COM', 'verona': 'HVE', 'lecce': 'USL',
+  // Bundesliga
+  'bayern-munich': 'FCB', 'bayer-leverkusen': 'B04', 'borussia-dortmund': 'BVB',
+  'rb-leipzig': 'RBL', 'eintracht-frankfurt': 'SGE', 'vfb-stuttgart': 'VFB',
+  'sc-freiburg': 'SCF', 'wolfsburg': 'WOB', 'werder-bremen': 'SVW',
+  'hoffenheim': 'TSG', 'mainz': 'M05', 'borussia-monchengladbach': 'BMG',
+  'augsburg': 'FCA', 'union-berlin': 'UNB', 'heidenheim': 'HEI', 'st-pauli': 'STP',
+  // Ligue 1
+  'psg': 'PSG', 'marseille': 'MAR', 'monaco': 'ASM', 'lille': 'LIL',
+  'lyon': 'LYO', 'nice': 'NIC', 'lens': 'RCL', 'rennes': 'REN',
+  'strasbourg': 'RC', 'toulouse': 'TOU', 'angers': 'ANG', 'auxerre': 'AJA',
+  'le-havre': 'HAC', 'nantes': 'NAN', 'brest': 'BRE',
+};
+
+// Build league-scoped lookup (handles FCB = Barcelona in La Liga, Bayern in Bundesliga; BRE = Brentford in PL, Brest in Ligue 1)
+const realSquadsByLeagueAndTla: Record<string, Record<string, RealPlayer[]>> = {};
+(['premier-league', 'la-liga', 'serie-a', 'bundesliga', 'ligue-1'] as const).forEach(league => {
+  realSquadsByLeagueAndTla[league] = {};
+  const teams = ((realSquadsData as unknown) as Record<string, RealTeamData[]>)[league] ?? [];
+  teams.forEach(t => { realSquadsByLeagueAndTla[league][t.tla] = t.squad ?? []; });
+});
+
+function getRealSquad(teamId: string, leagueId: string): RealPlayer[] {
+  const tla = teamIdToTla[teamId];
+  if (!tla) return [];
+  return realSquadsByLeagueAndTla[leagueId]?.[tla] ?? [];
+}
+
+// Map FDO position strings to our internal position types
+function mapFdoPosition(fdoPos: string): PlayerPosition {
+  switch (fdoPos) {
+    case 'Goalkeeper': return 'GK';
+    case 'Centre-Back': return 'CB';
+    case 'Left-Back': return 'LB';
+    case 'Right-Back': return 'RB';
+    case 'Defensive Midfield': return 'CDM';
+    case 'Central Midfield': return 'CM';
+    case 'Attacking Midfield': return 'CAM';
+    case 'Left Midfield': return 'LM';
+    case 'Right Midfield': return 'RM';
+    case 'Left Winger': return 'LW';
+    case 'Right Winger': return 'RW';
+    case 'Centre-Forward': return 'ST';
+    // FDO generic categories
+    case 'Defence': return pick(['CB', 'CB', 'LB', 'RB'] as PlayerPosition[]);
+    case 'Midfield': return pick(['CM', 'CM', 'CDM', 'CAM'] as PlayerPosition[]);
+    case 'Offence': return pick(['ST', 'LW', 'RW', 'CF'] as PlayerPosition[]);
+    default: return pick(positionDistribution);
+  }
+}
+
+function calcAgeFromDob(dob: string): number {
+  const birth = new Date(dob);
+  const now = new Date('2026-03-15');
+  let age = now.getFullYear() - birth.getFullYear();
+  if (now.getMonth() < birth.getMonth() || (now.getMonth() === birth.getMonth() && now.getDate() < birth.getDate())) age--;
+  return age;
+}
+
 
 // --- Seeded Random for deterministic data ---
 let seed = 42;
@@ -27,7 +110,7 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(seededRandom() * arr.length)];
 }
 
-// --- Nationality pools ---
+// --- Fallback name pools (only used when real data unavailable) ---
 const nationalities = [
   'England', 'France', 'Spain', 'Germany', 'Italy', 'Brazil', 'Argentina', 'Portugal',
   'Netherlands', 'Belgium', 'Croatia', 'Uruguay', 'Colombia', 'Nigeria', 'Senegal',
@@ -35,40 +118,10 @@ const nationalities = [
   'Canada', 'Mexico', 'Denmark', 'Sweden', 'Norway', 'Switzerland', 'Austria', 'Poland',
   'Czech Republic', 'Serbia', 'Scotland', 'Wales', 'Ireland', 'Algeria', 'Tunisia',
   'Egypt', 'Mali', 'Guinea', 'DR Congo', 'Australia', 'Turkey', 'Greece', 'Hungary',
-  'Ukraine', 'Romania', 'Slovakia', 'Slovenia', 'Bosnia', 'North Macedonia', 'Albania',
-  'Finland', 'Iceland', 'Paraguay', 'Chile', 'Ecuador', 'Peru', 'Venezuela', 'Jamaica',
 ];
 
-// --- Name generation pools ---
-const firstNames: Record<string, string[]> = {
-  England: ['Harry', 'Jack', 'James', 'Bukayo', 'Phil', 'Marcus', 'Declan', 'Cole', 'Jude', 'Trent', 'Aaron', 'Jordan', 'Callum', 'Ollie', 'Dominic', 'Conor', 'Ben', 'Kyle', 'Mason', 'Ezri', 'Eberechi', 'Noni', 'Levi', 'Adam', 'Lewis'],
-  France: ['Kylian', 'Antoine', 'Ousmane', 'Aurélien', 'Dayot', 'Theo', 'Lucas', 'Randal', 'Moussa', 'Youssouf', 'Ibrahima', 'William', 'Mattéo', 'Wesley', 'Rayan', 'Bradley', 'Adrien', 'Eduardo', 'Jules', 'Amine'],
-  Spain: ['Pedri', 'Gavi', 'Lamine', 'Alejandro', 'Dani', 'Mikel', 'Nico', 'Álvaro', 'Fermín', 'Pablo', 'Pau', 'Marcos', 'Rodrigo', 'Unai', 'Carlos', 'Álex', 'Hugo', 'Iñaki', 'Joselu', 'Marc'],
-  Germany: ['Florian', 'Jamal', 'Kai', 'Leroy', 'Antonio', 'Niclas', 'Joshua', 'Serge', 'Robin', 'Chris', 'Maximilian', 'Jonas', 'Deniz', 'Kevin', 'Lukas', 'Nico', 'Patrick', 'Mats', 'Thomas', 'Leon'],
-  Italy: ['Federico', 'Nicolò', 'Sandro', 'Alessandro', 'Lorenzo', 'Andrea', 'Matteo', 'Giacomo', 'Gianluca', 'Davide', 'Domenico', 'Danilo', 'Marco', 'Fabio', 'Simone', 'Riccardo', 'Stefano', 'Moise', 'Roberto', 'Giovanni'],
-  Brazil: ['Vinícius', 'Rodrygo', 'Raphinha', 'Bruno', 'Casemiro', 'Richarlison', 'Gabriel', 'Endrick', 'Éderson', 'Marquinhos', 'Neymar', 'Lucas', 'Danilo', 'Bremer', 'Antony', 'Savinho', 'Igor', 'Murilo', 'Wendell', 'Pedro'],
-  Argentina: ['Lionel', 'Julián', 'Enzo', 'Alexis', 'Lautaro', 'Emiliano', 'Leandro', 'Gonzalo', 'Lisandro', 'Nicolás', 'Paulo', 'Giovani', 'Thiago', 'Valentín', 'Cristian', 'Marcos', 'Gerónimo', 'Maximiliano', 'Exequiel', 'Alejandro'],
-  Portugal: ['Bruno', 'Bernardo', 'Diogo', 'Rafael', 'Gonçalo', 'João', 'Rúben', 'Pedro', 'Vitinha', 'Nuno', 'André', 'Francisco', 'António', 'Renato', 'Danilo', 'Otávio', 'Nelson', 'Ricardo', 'Matheus', 'William'],
-  default: ['Mohamed', 'David', 'Ivan', 'Victor', 'Kevin', 'Sander', 'Omar', 'Youssef', 'Christian', 'Patrick', 'Alexander', 'Daniel', 'Simon', 'Sebastian', 'Martin', 'Thomas', 'Michael', 'Robert', 'Jan', 'Niklas'],
-};
-
-const lastNames: Record<string, string[]> = {
-  England: ['Kane', 'Saka', 'Foden', 'Rice', 'Palmer', 'Bellingham', 'Alexander-Arnold', 'Ramsdale', 'White', 'Gallagher', 'Gordon', 'Watkins', 'Maddison', 'Stones', 'Walker', 'Grealish', 'Shaw', 'Konsa', 'Guehi', 'Madueke'],
-  France: ['Mbappé', 'Griezmann', 'Dembélé', 'Tchouaméni', 'Upamecano', 'Hernández', 'Hernández', 'Kolo Muani', 'Diaby', 'Fofana', 'Konaté', 'Saliba', 'Guendouzi', 'Barcola', 'Cherki', 'Camavinga', 'Rabiot', 'Pavard', 'Koundé', 'Thuram'],
-  Spain: ['Morata', 'Torres', 'Olmo', 'Yamal', 'Williams', 'Oyarzabal', 'Rodri', 'Carvajal', 'Navas', 'Merino', 'Cucurella', 'García', 'López', 'Ramos', 'Ruiz', 'Baena', 'Simón', 'Vivian', 'Laporte', 'Grimaldo'],
-  Germany: ['Wirtz', 'Musiala', 'Havertz', 'Sané', 'Rüdiger', 'Füllkrug', 'Kimmich', 'Gnabry', 'Gosens', 'Führich', 'Beier', 'Schlotterbeck', 'Undav', 'Schick', 'Brandt', 'Hummels', 'Müller', 'Goretzka', 'Gündogan', 'Tah'],
-  Italy: ['Chiesa', 'Barella', 'Tonali', 'Bastoni', 'Pellegrini', 'Locatelli', 'Dimarco', 'Scamacca', 'Raspadori', 'Retegui', 'Jorginho', 'Donnarumma', 'Di Lorenzo', 'Buongiorno', 'Frattesi', 'Cristante', 'Zaccagni', 'Orsolini', 'Kean', 'Calafiori'],
-  Brazil: ['Júnior', 'Guimarães', 'Martinelli', 'Jesus', 'Fernandes', 'Paquetá', 'Silva', 'Barbosa', 'Nunes', 'Militão', 'Araújo', 'Santos', 'Pereira', 'Costa', 'Almeida', 'Oliveira', 'Sousa', 'Lima', 'Ribeiro', 'Moreira'],
-  Argentina: ['Messi', 'Álvarez', 'Fernández', 'Mac Allister', 'Martínez', 'Paredes', 'Di María', 'Montiel', 'Tagliafico', 'Otamendi', 'Dybala', 'Lo Celso', 'Garnacho', 'Romero', 'Carboni', 'Ángel', 'Palacios', 'Almada', 'Barco', 'Buonanotte'],
-  Portugal: ['Fernandes', 'Silva', 'Jota', 'Leão', 'Ramos', 'Félix', 'Neves', 'Dias', 'Mendes', 'Santos', 'Pereira', 'Costa', 'Conceição', 'Neto', 'Palhinha', 'Horta', 'Vieira', 'Sémedo', 'Guerreiro', 'Dalot'],
-  default: ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'García', 'Miller', 'Davis', 'Martínez', 'López', 'González', 'Wilson', 'Anderson', 'Taylor', 'Thomas', 'Moore', 'Jackson', 'White', 'Harris', 'Clark'],
-};
-
-function genName(nationality: string): [string, string] {
-  const fns = firstNames[nationality] || firstNames.default;
-  const lns = lastNames[nationality] || lastNames.default;
-  return [pick(fns), pick(lns)];
-}
+const fallbackFirstNames = ['James', 'Lucas', 'Mohamed', 'David', 'Ivan', 'Victor', 'Kevin', 'Sander', 'Omar', 'Christian', 'Patrick', 'Alexander', 'Daniel', 'Simon', 'Sebastian', 'Martin', 'Thomas', 'Michael', 'Robert', 'Jan'];
+const fallbackLastNames = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'García', 'Miller', 'Davis', 'Martínez', 'López', 'González', 'Wilson', 'Anderson', 'Taylor', 'Thomas', 'Moore', 'Jackson', 'White', 'Harris', 'Clark'];
 
 // --- Position & Attribute Generation ---
 const positions: PlayerPosition[] = ['GK', 'CB', 'LB', 'RB', 'LWB', 'RWB', 'CDM', 'CM', 'CAM', 'LM', 'RM', 'LW', 'RW', 'CF', 'ST'];
@@ -83,7 +136,7 @@ const positionDistribution: PlayerPosition[] = [
 ];
 
 function genAttributes(pos: PlayerPosition, tier: number): PlayerAttributes {
-  const base = tier; // 1=elite club, 5=bottom club
+  const base = tier;
   const adj = (min: number, max: number) => randInt(Math.max(1, min - base * 2), Math.min(20, max - base));
   const isGK = pos === 'GK';
   const isDef = ['CB', 'LB', 'RB', 'LWB', 'RWB'].includes(pos);
@@ -153,19 +206,44 @@ const injuries = ['Hamstring strain', 'Knee ligament', 'Ankle sprain', 'Calf str
   'Groin injury', 'Back spasm', 'Concussion', 'ACL tear', 'Meniscus injury', 'Shoulder dislocation',
   'Fractured metatarsal', 'Quad strain', 'Hip flexor', 'Achilles tendon'];
 
-// --- Generate a single player ---
-function generatePlayer(teamDef: TeamDef, idx: number, tier: number): Player {
-  const leagueNats: Record<string, string[]> = {
-    'premier-league': ['England', 'England', 'England', 'France', 'Brazil', 'Portugal', 'Spain', 'Netherlands', 'Belgium', 'Argentina', 'Nigeria', 'Ghana', 'Senegal', 'Uruguay', 'Colombia'],
-    'la-liga': ['Spain', 'Spain', 'Spain', 'Spain', 'France', 'Brazil', 'Argentina', 'Uruguay', 'Colombia', 'Portugal', 'Morocco', 'Netherlands', 'Germany'],
-    'serie-a': ['Italy', 'Italy', 'Italy', 'Italy', 'Argentina', 'Brazil', 'France', 'Nigeria', 'Portugal', 'Spain', 'Netherlands', 'Serbia', 'Croatia'],
-    'bundesliga': ['Germany', 'Germany', 'Germany', 'Germany', 'France', 'Austria', 'Japan', 'South Korea', 'Netherlands', 'Croatia', 'Mali', 'Guinea', 'USA'],
-    'ligue-1': ['France', 'France', 'France', 'France', 'Senegal', 'Ivory Coast', 'Morocco', 'Algeria', 'Cameroon', 'Mali', 'Brazil', 'Argentina', 'Portugal'],
-  };
-  const nat = pick(leagueNats[teamDef.leagueId] || nationalities);
-  const [firstName, lastName] = genName(nat);
-  const pos = positionDistribution[idx % positionDistribution.length];
-  const age = pos === 'GK' ? randInt(20, 36) : randInt(17, 35);
+// --- Generate a single player (REAL DATA + generated attributes) ---
+function generatePlayer(teamDef: TeamDef, idx: number, tier: number, realSquad: RealPlayer[]): Player {
+  const realPlayer = realSquad[idx] ?? null;
+
+  // Use real data when available, fallback to procedural generation
+  let playerName: string;
+  let firstName: string;
+  let lastName: string;
+  let nat: string;
+  let pos: PlayerPosition;
+  let age: number;
+  let dob: string;
+
+  if (realPlayer) {
+    playerName = realPlayer.name;
+    const nameParts = realPlayer.name.split(' ');
+    firstName = nameParts[0];
+    lastName = nameParts.slice(1).join(' ') || nameParts[0];
+    nat = realPlayer.nationality || 'Unknown';
+    pos = mapFdoPosition(realPlayer.position || '');
+    if (realPlayer.dateOfBirth) {
+      age = calcAgeFromDob(realPlayer.dateOfBirth);
+      dob = realPlayer.dateOfBirth;
+    } else {
+      age = pos === 'GK' ? randInt(20, 36) : randInt(17, 35);
+      dob = `${2026 - age}-${String(randInt(1, 12)).padStart(2, '0')}-${String(randInt(1, 28)).padStart(2, '0')}`;
+    }
+  } else {
+    // Fallback: procedurally generated player
+    firstName = pick(fallbackFirstNames);
+    lastName = pick(fallbackLastNames);
+    playerName = `${firstName} ${lastName}`;
+    nat = pick(nationalities);
+    pos = positionDistribution[idx % positionDistribution.length];
+    age = pos === 'GK' ? randInt(20, 36) : randInt(17, 35);
+    dob = `${2026 - age}-${String(randInt(1, 12)).padStart(2, '0')}-${String(randInt(1, 28)).padStart(2, '0')}`;
+  }
+
   const attrs = genAttributes(pos, tier);
   const overall = calcOverall(attrs, pos);
   attrs.overallRating = overall;
@@ -178,14 +256,14 @@ function generatePlayer(teamDef: TeamDef, idx: number, tier: number): Player {
   const assists = pos === 'GK' ? randInt(0, 1) : isAttacker ? randInt(1, 12) : isMid ? randInt(1, 10) : randInt(0, 4);
 
   return {
-    id: `${teamDef.id}-p${idx}`,
-    name: `${firstName} ${lastName}`,
+    id: realPlayer ? `${teamDef.id}-r${realPlayer.id}` : `${teamDef.id}-p${idx}`,
+    name: playerName,
     firstName, lastName,
     team: teamDef.name, teamId: teamDef.id, teamLogo: teamDef.logo, leagueId: teamDef.leagueId,
     position: pos,
     secondaryPositions: [pick(positions.filter(p => p !== pos))],
     nationality: nat,
-    age, dateOfBirth: `${2026 - age}-${String(randInt(1, 12)).padStart(2, '0')}-${String(randInt(1, 28)).padStart(2, '0')}`,
+    age, dateOfBirth: dob,
     height: pos === 'GK' ? randInt(183, 198) : randInt(168, 195),
     weight: randInt(65, 92),
     preferredFoot: seededRandom() > 0.75 ? 'left' : seededRandom() > 0.95 ? 'both' : 'right',
@@ -253,18 +331,15 @@ function generateMatch(home: TeamDef, away: TeamDef, matchday: number, leagueId:
   const events: MatchEvent[] = [];
   let evtId = 0;
 
-  // Generate goal events
   for (let g = 0; g < homeGoals; g++) {
     events.push({ id: `evt-${matchIdx}-${evtId++}`, minute: randInt(1, 90), type: seededRandom() > 0.9 ? 'penalty-goal' : 'goal', team: 'home', player: `${home.shortName} Player`, xG: randFloat(0.05, 0.85) });
   }
   for (let g = 0; g < awayGoals; g++) {
     events.push({ id: `evt-${matchIdx}-${evtId++}`, minute: randInt(1, 90), type: seededRandom() > 0.9 ? 'penalty-goal' : 'goal', team: 'away', player: `${away.shortName} Player`, xG: randFloat(0.05, 0.85) });
   }
-  // Cards
   for (let c = 0; c < randInt(1, 6); c++) {
     events.push({ id: `evt-${matchIdx}-${evtId++}`, minute: randInt(15, 90), type: seededRandom() > 0.92 ? 'red' : 'yellow', team: seededRandom() > 0.5 ? 'home' : 'away', player: `Player ${randInt(1, 11)}` });
   }
-  // Subs
   for (let s = 0; s < randInt(3, 6); s++) {
     events.push({ id: `evt-${matchIdx}-${evtId++}`, minute: randInt(46, 88), type: 'substitution', team: seededRandom() > 0.5 ? 'home' : 'away', player: `Player ${randInt(12, 23)}`, secondPlayer: `Player ${randInt(1, 11)}` });
   }
@@ -273,39 +348,27 @@ function generateMatch(home: TeamDef, away: TeamDef, matchday: number, leagueId:
   const homePoss = randInt(35, 65);
   const stats: MatchStats = {
     possession: [homePoss, 100 - homePoss],
-    shots: [randInt(5, 22), randInt(3, 20)],
-    shotsOnTarget: [randInt(1, 10), randInt(1, 9)],
-    shotsOffTarget: [randInt(2, 10), randInt(1, 9)],
-    blockedShots: [randInt(0, 5), randInt(0, 5)],
-    corners: [randInt(2, 12), randInt(1, 10)],
-    fouls: [randInt(6, 18), randInt(5, 17)],
-    offsides: [randInt(0, 5), randInt(0, 5)],
-    passes: [randInt(250, 650), randInt(200, 600)],
-    passAccuracy: [randFloat(72, 92), randFloat(68, 91)],
-    xG: [randFloat(0.5, 3.8), randFloat(0.3, 3.2)],
-    bigChances: [randInt(1, 6), randInt(0, 5)],
-    tackles: [randInt(10, 30), randInt(8, 28)],
-    interceptions: [randInt(5, 18), randInt(4, 16)],
-    saves: [randInt(1, 8), randInt(1, 9)],
-    clearances: [randInt(8, 30), randInt(6, 28)],
-    yellowCards: [randInt(0, 4), randInt(0, 4)],
-    redCards: [randInt(0, 1), randInt(0, 1)],
-    aerialDuels: [randInt(8, 25), randInt(6, 22)],
-    dribbles: [randInt(5, 18), randInt(4, 16)],
-    throwIns: [randInt(10, 30), randInt(8, 28)],
-    goalKicks: [randInt(3, 12), randInt(3, 12)],
-    longBalls: [randInt(20, 65), randInt(18, 60)],
+    shots: [randInt(5, 22), randInt(3, 20)], shotsOnTarget: [randInt(1, 10), randInt(1, 9)],
+    shotsOffTarget: [randInt(2, 10), randInt(1, 9)], blockedShots: [randInt(0, 5), randInt(0, 5)],
+    corners: [randInt(2, 12), randInt(1, 10)], fouls: [randInt(6, 18), randInt(5, 17)],
+    offsides: [randInt(0, 5), randInt(0, 5)], passes: [randInt(250, 650), randInt(200, 600)],
+    passAccuracy: [randFloat(72, 92), randFloat(68, 91)], xG: [randFloat(0.5, 3.8), randFloat(0.3, 3.2)],
+    bigChances: [randInt(1, 6), randInt(0, 5)], tackles: [randInt(10, 30), randInt(8, 28)],
+    interceptions: [randInt(5, 18), randInt(4, 16)], saves: [randInt(1, 8), randInt(1, 9)],
+    clearances: [randInt(8, 30), randInt(6, 28)], yellowCards: [randInt(0, 4), randInt(0, 4)],
+    redCards: [randInt(0, 1), randInt(0, 1)], aerialDuels: [randInt(8, 25), randInt(6, 22)],
+    dribbles: [randInt(5, 18), randInt(4, 16)], throwIns: [randInt(10, 30), randInt(8, 28)],
+    goalKicks: [randInt(3, 12), randInt(3, 12)], longBalls: [randInt(20, 65), randInt(18, 60)],
     crosses: [randInt(8, 28), randInt(6, 25)],
   };
 
+  const emptyStats: MatchStats = { possession: [50, 50], shots: [0, 0], shotsOnTarget: [0, 0], shotsOffTarget: [0, 0], blockedShots: [0, 0], corners: [0, 0], fouls: [0, 0], offsides: [0, 0], passes: [0, 0], passAccuracy: [0, 0], xG: [0, 0], bigChances: [0, 0], tackles: [0, 0], interceptions: [0, 0], saves: [0, 0], clearances: [0, 0], yellowCards: [0, 0], redCards: [0, 0], aerialDuels: [0, 0], dribbles: [0, 0], throwIns: [0, 0], goalKicks: [0, 0], longBalls: [0, 0], crosses: [0, 0] };
+
   return {
-    id: `match-${matchIdx}`,
-    league: home.league, leagueId,
-    matchday,
+    id: `match-${matchIdx}`, league: home.league, leagueId, matchday,
     homeTeam: { id: home.id, name: home.name, shortName: home.shortName, logo: home.logo, formation: home.formation, manager: home.manager },
     awayTeam: { id: away.id, name: away.name, shortName: away.shortName, logo: away.logo, formation: away.formation, manager: away.manager },
-    homeScore: isFinished ? homeGoals : null,
-    awayScore: isFinished ? awayGoals : null,
+    homeScore: isFinished ? homeGoals : null, awayScore: isFinished ? awayGoals : null,
     halfTimeScore: isFinished ? [Math.min(homeGoals, randInt(0, homeGoals)), Math.min(awayGoals, randInt(0, awayGoals))] : undefined,
     status: isFinished ? 'finished' : matchday === 29 ? 'live' : 'scheduled',
     minute: matchday === 29 ? randInt(1, 90) : undefined,
@@ -316,7 +379,7 @@ function generateMatch(home: TeamDef, away: TeamDef, matchday: number, leagueId:
     referee: pick(referees),
     weather: pick(['Sunny', 'Cloudy', 'Light Rain', 'Overcast', 'Clear', 'Heavy Rain', 'Windy']),
     events: isFinished ? events : [],
-    stats: isFinished ? stats : { possession: [50, 50], shots: [0, 0], shotsOnTarget: [0, 0], shotsOffTarget: [0, 0], blockedShots: [0, 0], corners: [0, 0], fouls: [0, 0], offsides: [0, 0], passes: [0, 0], passAccuracy: [0, 0], xG: [0, 0], bigChances: [0, 0], tackles: [0, 0], interceptions: [0, 0], saves: [0, 0], clearances: [0, 0], yellowCards: [0, 0], redCards: [0, 0], aerialDuels: [0, 0], dribbles: [0, 0], throwIns: [0, 0], goalKicks: [0, 0], longBalls: [0, 0], crosses: [0, 0] },
+    stats: isFinished ? stats : emptyStats,
     momentum: isFinished ? Array.from({ length: 18 }, () => randInt(-80, 80)) : undefined,
   };
 }
@@ -384,7 +447,6 @@ function buildTeam(def: TeamDef, players: Player[], matches: Match[]): Team {
     width: pick(['narrow', 'standard', 'wide']), creativity: randInt(8, 18),
     discipline: randInt(10, 18), setpieces: randInt(8, 17), counterAttack: randInt(6, 18),
   };
-
   const recentForm: FormResult[] = Array.from({ length: 5 }, () => pick(['W', 'W', 'D', 'L'] as FormResult[]));
 
   const transfers: Transfer[] = Array.from({ length: randInt(2, 6) }, (_, i) => ({
@@ -441,79 +503,93 @@ function buildTeam(def: TeamDef, players: Player[], matches: Match[]): Team {
   };
 }
 
-// --- Generate matches for a league (round-robin first 30 matchdays) ---
-function generateLeagueMatches(teams: TeamDef[], leagueId: string, startIdx: number): Match[] {
-  const matches: Match[] = [];
-  let matchIdx = startIdx;
-  let matchday = 1;
-  // Generate ~10 matches per matchday, 30 matchdays = ~300 matches per league
-  for (let md = 1; md <= 30; md++) {
-    const shuffled = [...teams].sort(() => seededRandom() - 0.5);
-    const pairCount = Math.floor(shuffled.length / 2);
-    for (let p = 0; p < pairCount; p++) {
-      matches.push(generateMatch(shuffled[p * 2], shuffled[p * 2 + 1], md, leagueId, matchIdx++));
+// ============================
+// MAIN GENERATION LOOP
+// ============================
+
+const leagueGroups: Record<string, TeamDef[]> = {};
+allTeamDefs.forEach(t => {
+  if (!leagueGroups[t.leagueId]) leagueGroups[t.leagueId] = [];
+  leagueGroups[t.leagueId].push(t);
+});
+
+export const allPlayers: Player[] = [];
+export const allTeams: Team[] = [];
+export const allMatches: Match[] = [];
+export const allStandings: Standing[] = [];
+
+let matchCounter = 0;
+
+// For each league, generate round-robin matches, then players & teams
+Object.entries(leagueGroups).forEach(([leagueId, teams]) => {
+  const leagueMatches: Match[] = [];
+  const tier = leagueId === 'premier-league' ? 1 : leagueId === 'la-liga' ? 1 : leagueId === 'bundesliga' ? 2 : leagueId === 'serie-a' ? 2 : 3;
+
+  // Round-robin: each team plays every other team once (single round for performance)
+  for (let i = 0; i < teams.length; i++) {
+    for (let j = i + 1; j < teams.length; j++) {
+      const matchday = Math.floor(matchCounter / (teams.length / 2)) + 1;
+      const m = generateMatch(teams[i], teams[j], Math.min(matchday, 34), leagueId, matchCounter++);
+      leagueMatches.push(m);
     }
   }
-  return matches;
-}
+  allMatches.push(...leagueMatches);
 
-// --- MAIN GENERATION ---
-interface LeagueData {
-  id: string; teams: Team[]; players: Player[]; matches: Match[]; standings: Standing[];
-}
+  // Generate standings for this league
+  const leagueStandings = generateStandings(teams, leagueMatches);
+  allStandings.push(...leagueStandings);
 
-const leagueConfigs: { id: string; teams: TeamDef[]; tier: number[] }[] = [
-  { id: 'premier-league', teams: allTeamDefs.filter(t => t.leagueId === 'premier-league'), tier: [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5] },
-  { id: 'la-liga', teams: allTeamDefs.filter(t => t.leagueId === 'la-liga'), tier: [1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5] },
-  { id: 'serie-a', teams: allTeamDefs.filter(t => t.leagueId === 'serie-a'), tier: [1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5] },
-  { id: 'bundesliga', teams: allTeamDefs.filter(t => t.leagueId === 'bundesliga'), tier: [1, 1, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 5] },
-  { id: 'ligue-1', teams: allTeamDefs.filter(t => t.leagueId === 'ligue-1'), tier: [1, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5] },
-];
+  // Generate players and teams
+  teams.forEach(def => {
+    const realSquad: RealPlayer[] = getRealSquad(def.id, leagueId);
+    const squadSize = Math.max(25, realSquad.length);
+    const teamPlayers: Player[] = [];
 
-const generatedData: LeagueData[] = [];
-let globalMatchIdx = 0;
-
-for (const config of leagueConfigs) {
-  // Generate players
-  const leaguePlayers: Player[] = [];
-  config.teams.forEach((teamDef, teamIdx) => {
-    const tier = config.tier[teamIdx] ?? 3;
-    for (let i = 0; i < 26; i++) {
-      leaguePlayers.push(generatePlayer(teamDef, i, tier));
+    for (let p = 0; p < squadSize; p++) {
+      const player = generatePlayer(def, p, tier, realSquad);
+      teamPlayers.push(player);
     }
+    allPlayers.push(...teamPlayers);
+
+    const team = buildTeam(def, teamPlayers, leagueMatches);
+    allTeams.push(team);
   });
+});
 
-  // Generate matches
-  const leagueMatches = generateLeagueMatches(config.teams, config.id, globalMatchIdx);
-  globalMatchIdx += leagueMatches.length;
+// ============================
+// EXPORT HELPERS
+// ============================
 
-  // Generate standings
-  const leagueStandings = generateStandings(config.teams, leagueMatches);
-
-  // Build full team objects
-  const leagueTeams = config.teams.map(def =>
-    buildTeam(def, leaguePlayers.filter(p => p.teamId === def.id), leagueMatches)
-  );
-
-  generatedData.push({ id: config.id, teams: leagueTeams, players: leaguePlayers, matches: leagueMatches, standings: leagueStandings });
+export function getTeamsByLeague(leagueId: string): Team[] {
+  return allTeams.filter(t => t.leagueId === leagueId);
 }
-
-// --- EXPORTS ---
-export const allTeams: Team[] = generatedData.flatMap(d => d.teams);
-export const allPlayers: Player[] = generatedData.flatMap(d => d.players);
-export const allMatches: Match[] = generatedData.flatMap(d => d.matches);
-export const allStandings: Record<string, Standing[]> = Object.fromEntries(generatedData.map(d => [d.id, d.standings]));
-
-export function getTeamsByLeague(leagueId: string): Team[] { return allTeams.filter(t => t.leagueId === leagueId); }
-export function getPlayersByTeam(teamId: string): Player[] { return allPlayers.filter(p => p.teamId === teamId); }
-export function getPlayersByLeague(leagueId: string): Player[] { return allPlayers.filter(p => p.leagueId === leagueId); }
-export function getMatchesByLeague(leagueId: string): Match[] { return allMatches.filter(m => m.leagueId === leagueId); }
-export function getMatchesByTeam(teamId: string): Match[] { return allMatches.filter(m => m.homeTeam.id === teamId || m.awayTeam.id === teamId); }
-export function getStandings(leagueId: string): Standing[] { return allStandings[leagueId] ?? []; }
-export function getTeamById(id: string): Team | undefined { return allTeams.find(t => t.id === id); }
-export function getPlayerById(id: string): Player | undefined { return allPlayers.find(p => p.id === id); }
-export function getMatchById(id: string): Match | undefined { return allMatches.find(m => m.id === id); }
-
+export function getPlayersByTeam(teamId: string): Player[] {
+  return allPlayers.filter(p => p.teamId === teamId);
+}
+export function getPlayersByLeague(leagueId: string): Player[] {
+  return allPlayers.filter(p => p.leagueId === leagueId);
+}
+export function getMatchesByLeague(leagueId: string): Match[] {
+  return allMatches.filter(m => m.leagueId === leagueId);
+}
+export function getMatchesByTeam(teamId: string): Match[] {
+  return allMatches.filter(m => m.homeTeam.id === teamId || m.awayTeam.id === teamId);
+}
+export function getStandings(leagueId: string): Standing[] {
+  return allStandings.filter(s => {
+    const team = allTeams.find(t => t.id === s.team.id);
+    return team?.leagueId === leagueId;
+  });
+}
+export function getTeamById(id: string): Team | undefined {
+  return allTeams.find(t => t.id === id);
+}
+export function getPlayerById(id: string): Player | undefined {
+  return allPlayers.find(p => p.id === id);
+}
+export function getMatchById(id: string): Match | undefined {
+  return allMatches.find(m => m.id === id);
+}
 export function getTopScorers(leagueId?: string, limit = 20): Player[] {
   const pool = leagueId ? getPlayersByLeague(leagueId) : allPlayers;
   return [...pool].sort((a, b) => b.seasonStats.goals - a.seasonStats.goals).slice(0, limit);
@@ -522,12 +598,12 @@ export function getTopAssisters(leagueId?: string, limit = 20): Player[] {
   const pool = leagueId ? getPlayersByLeague(leagueId) : allPlayers;
   return [...pool].sort((a, b) => b.seasonStats.assists - a.seasonStats.assists).slice(0, limit);
 }
-export function getRecentMatches(leagueId?: string, limit = 10): Match[] {
-  const pool = leagueId ? getMatchesByLeague(leagueId) : allMatches;
-  return pool.filter(m => m.status === 'finished').slice(-limit).reverse();
+export function getRecentMatches(limit = 10): Match[] {
+  return allMatches.filter(m => m.status === 'finished').slice(-limit);
 }
-export function getLiveMatches(): Match[] { return allMatches.filter(m => m.status === 'live'); }
-export function getUpcomingMatches(leagueId?: string, limit = 10): Match[] {
-  const pool = leagueId ? getMatchesByLeague(leagueId) : allMatches;
-  return pool.filter(m => m.status === 'scheduled').slice(0, limit);
+export function getLiveMatches(): Match[] {
+  return allMatches.filter(m => m.status === 'live');
+}
+export function getUpcomingMatches(limit = 10): Match[] {
+  return allMatches.filter(m => m.status === 'scheduled').slice(0, limit);
 }
